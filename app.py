@@ -57,17 +57,25 @@ def fetch_latest_orders(since_datetime):
 def filter_out_pending_cancelled(df):
     """
     Filter out rows where:
-    - 'Order Status' (a list) contains 'pending' or 'cancelled'
-    - OR 'Payment Status' (a string) is 'pending' or 'cancelled'
+    - 'Order Status' (a list) contains both 'pending' AND 'cancelled' (exclude such rows),
+    - OR 'Payment Status' (a string) contains 'cancelled' (exclude such rows),
+    - but allow 'pending' in 'Payment Status'.
     """
-    def contains_pending_cancelled(status_list):
+    def has_both_pending_cancelled(status_list):
         if not isinstance(status_list, list):
-            return False  # Keep if no list present
+            return False  # Keep row if not a list
         lowered = [s.lower() for s in status_list if isinstance(s, str)]
-        return any(s in ['pending', 'cancelled'] for s in lowered)
+        return ('pending' in lowered) and ('cancelled' in lowered)
 
-    mask_order_status_ok = ~df['Order Status'].apply(contains_pending_cancelled)
-    mask_payment_status_ok = ~df['Payment Status'].str.lower().isin(['pending', 'cancelled'])
+    mask_order_status_ok = ~df['Order Status'].apply(has_both_pending_cancelled)
+
+    def payment_status_not_cancelled(status_str):
+        if not isinstance(status_str, str):
+            return False  # Exclude non-string payment statuses for safety
+        status = status_str.lower()
+        return 'cancelled' not in status
+
+    mask_payment_status_ok = df['Payment Status'].apply(payment_status_not_cancelled)
 
     return df[mask_order_status_ok & mask_payment_status_ok].copy()
 
